@@ -1,8 +1,6 @@
 require('dotenv').config();
 const mqtt = require('mqtt');
-const mongoose = require('mongoose');
 const AWS = require('aws-sdk');
-
 
 AWS.config.update({
   accessKeyId: process.env.AWS_ACCESS_KEY_ID,
@@ -13,41 +11,12 @@ AWS.config.update({
 const dynamoDB = new AWS.DynamoDB.DocumentClient();
 
 const options = {
-    host: `${process.env.MQTT_HOST}`,
+    host: 'localhost', // Use localhost since the MQTT server is running on the same machine
     port: process.env.MQTT_PORT,
-    protocol: `${process.env.MQTT_PROTOCOL}`,
-    username: `${process.env.MQTT_USERNAME}`,  // Add your username here
-    password: `${process.env.MQTT_PASSWORD}`
+    protocol: process.env.MQTT_PROTOCOL,
+    username: process.env.MQTT_USERNAME,  // Add your username here
+    password: process.env.MQTT_PASSWORD
 };
-
-/*
-mongoose.connect(process.env.MONGO_URI, {
-    useNewUrlParser: true,
-    useUnifiedTopology: true,
-});
-
-
-const db = mongoose.connection;
-db.on('error', console.error.bind(console, 'MongoDB connection error:'));
-db.once('open', () => console.log('Connected to MongoDB Atlas'));
-
-const deviceDataSchema = new mongoose.Schema({
-    device_type: String,
-    device_name: String,
-    device_id: String,
-    date: String,
-    time: String,
-    time_zone: String,
-    latitude: String,
-    longitude: String,
-    software_ver: String,
-    signal_strength: String,
-    valid: Boolean,
-    data: Object,
-});
-
-const DeviceData = mongoose.model('DeviceData', deviceDataSchema);
-*/
 const client = mqtt.connect(options);
 
 client.on('connect', () => {
@@ -84,11 +53,6 @@ client.on('message', async (topic, message) => {
 
   // Insert into DynamoDB
   await dynamoDB.put(params).promise();
-  console.log('Data saved to DynamoDB');
-  /*
-    const newData = new DeviceData(jsonData);
-    await newData.save();
-    */
     console.log('Data saved to Dynamo');
   } catch (error) {
     console.error('Error processing MQTT message:', error);
