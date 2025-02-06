@@ -1,7 +1,7 @@
 require('dotenv').config();
 const mqtt = require('mqtt');
-const { SQSClient, SendMessageCommand } = require('@aws-sdk/client-sqs');
-const { DynamoDBClient, PutItemCommand } = require('@aws-sdk/client-dynamodb');
+const { SQSClient, SendMessageCommand } = require('@aws-sdk/client-sqs'); // v3 import for SQS
+const { DynamoDBClient, PutItemCommand } = require('@aws-sdk/client-dynamodb'); // v3 import for DynamoDB
 
 // Initialize AWS SDK clients with credentials
 const awsConfig = {
@@ -38,38 +38,25 @@ client.on('connect', () => {
 client.on('message', async (topic, message) => {
   try {
     const jsonData = JSON.parse(message.toString());
+    console.log('Received Data:', jsonData);
 
+    // Combine date and time into date_time field
     const date_time = `${jsonData.date} ${jsonData.time}`;
+    
+    // Extract hour from time string (hh:mm:ss)
     const hour = parseInt(jsonData.time.split(':')[0]);
-    const data = jsonData.data;
 
-    if (hour <= 6 || hour >= 19) {
+    // Check if time is before 06:00 or after 19:00
+    if (hour < 6 || hour > 19) {
+      // Calculate TTL (7 days from now in seconds)
+      const ttlDate = new Date();
+      ttlDate.setDate(ttlDate.getDate() + 7);
+      const ttl = Math.floor(ttlDate.getTime() / 1000);
+
+      // Send to DynamoDB
       const dynamoParams = {
         TableName: "DeviceData",
         Item: {
-          device_id: { S: jsonData.device_id },
-          date_time: { S: date_time },
-          device_type: { S: jsonData.device_type },
-          device_name: { S: jsonData.device_name },
-          time_zone: { S: jsonData.time_zone },
-          latitude: { N: String(parseFloat(jsonData.latitude) || 0) },
-          longitude: { N: String(parseFloat(jsonData.longitude) || 0) },
-          software_ver: { S: jsonData.software_ver },
-          signal_strength: { N: String(parseInt(jsonData.signal_strength) || 0) },
-          valid: { BOOL: Boolean(jsonData.valid) },
-          data: { S: JSON.stringify(data) },
-          ttl: { N: String(Math.floor(Date.now() / 1000) + 7 * 24 * 60 * 60) }
-        }
-      };
-
-      const command = new PutItemCommand(dynamoParams);
-      await dynamoDB.send(command);
-      console.log('Data sent to DynamoDB');
-    } else {
-      const formattedDateTime = date_time.replace(/[\s:/]/g, '-');
-      const sqsParams = {
-        QueueUrl: process.env.SQS_QUEUE_URL,
-        MessageBody: JSON.stringify({
           device_id: jsonData.device_id,
           date_time: date_time,
           device_type: jsonData.device_type,
@@ -80,8 +67,33 @@ client.on('message', async (topic, message) => {
           software_ver: jsonData.software_ver,
           signal_strength: jsonData.signal_strength,
           valid: jsonData.valid,
+          data: jsonData.data,
+          ttl: ttl
+        }
+      };
+
+      const dynamoCommand = new PutItemCommand(dynamoParams);
+      await dynamoDB.send(dynamoCommand);
+      console.log('Data sent to DynamoDB with TTL:', new Date(ttl * 1000));
+    } else {
+      // Send to SQS FIFO queue
+      const formattedDateTime = date_time.replace(/[\s:/]/g, '-');
+      const sqsParams = {
+        QueueUrl: process.env.SQS_QUEUE_URL,
+        MessageBody: JSON.stringify({
+          device_id: jsonData.device_id,
+          date_time: date_time,  // Use combined date_time
+          device_type: jsonData.device_type,
+          device_name: jsonData.device_name,
+          time_zone: jsonData.time_zone,
+          latitude: jsonData.latitude,
+          longitude: jsonData.longitude,
+          software_ver: jsonData.software_ver,
+          signal_strength: jsonData.signal_strength,
+          valid: jsonData.valid,
           data: jsonData.data
         }),
+        // Required for FIFO queues
         MessageGroupId: jsonData.device_id,
         MessageDeduplicationId: `${jsonData.device_id}-${formattedDateTime}`
       };

@@ -10,8 +10,11 @@
   "license": "ISC",
   "description": "",
   "dependencies": {
+    "@aws-sdk/client-dynamodb": "^3.741.0",
+    "@aws-sdk/client-sqs": "^3.741.0",
     "aws-sdk": "^2.1692.0",
     "dotenv": "^16.4.7",
+    "lib-dynamo": "^1.0.0",
     "mongoose": "^8.9.5",
     "mqtt": "^5.10.3",
     "nodemon": "^3.1.9"
